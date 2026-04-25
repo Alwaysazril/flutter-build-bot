@@ -1,0 +1,63 @@
+name: Flutter Build APK
+
+on:
+  push:
+    paths:
+      - 'upload/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.0'
+          channel: 'stable'
+
+      - name: Extract ZIP
+        run: |
+          mkdir -p flutter_project
+          ZIP_FILE=$(ls upload/*.zip | head -1)
+          echo "Found ZIP: $ZIP_FILE"
+          unzip "$ZIP_FILE" -d flutter_project/
+          
+          # Cari folder pubspec.yaml
+          PUBSPEC=$(find flutter_project -name "pubspec.yaml" | head -1)
+          PROJECT_DIR=$(dirname "$PUBSPEC")
+          echo "Project dir: $PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
+
+      - name: Flutter pub get
+        run: |
+          cd "$PROJECT_DIR"
+          flutter pub get
+
+      - name: Build APK
+        run: |
+          cd "$PROJECT_DIR"
+          flutter build apk --release
+
+      - name: Find APK
+        run: |
+          APK=$(find "$PROJECT_DIR" -name "*.apk" | head -1)
+          echo "APK_PATH=$APK" >> $GITHUB_ENV
+          echo "Found APK: $APK"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: "APK Build #${{ github.run_number }}"
+          files: ${{ env.APK_PATH }}
+          token: ${{ secrets.GITHUB_TOKEN }}
